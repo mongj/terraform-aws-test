@@ -1,0 +1,40 @@
+#!/bin/bash
+sudo yum update
+sudo yum install docker -y
+
+# install git
+sudo yum install git -y
+
+# install docker
+sudo usermod -a -G docker ec2-user
+id ec2-user
+newgrp docker
+
+# install docker-compose
+sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+
+# clone repository
+sudo git clone ${repo_link} /usr/local/src/${repo_name}
+
+# set system-wide environment variables and TLS private key
+cat <<EOF | sudo tee /etc/profile.d/env.sh
+%{ for key, value in secrets ~}
+%{ if key == "TLS_PRIVATE_KEY" ~}
+echo "${value}" | sudo tee /usr/local/src/${repo_name}/private.key
+%{ else ~}
+export ${key}=${value}
+%{ endif ~}
+%{ endfor ~}
+EOF
+
+# set up env variable for the current process
+%{ for key, value in secrets ~}
+%{ if key != "TLS_PRIVATE_KEY" ~}
+export ${key}=${value}
+%{ endif ~}
+%{ endfor ~}
+
+# spin up containers
+sudo systemctl start docker
+docker-compose -f /usr/local/src/${repo_name}/${docker_compose_filename} up -d
